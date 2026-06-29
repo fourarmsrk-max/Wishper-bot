@@ -1,1 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Secret Whisper</title>
+    <style>
+        :root {
+            --bg-color: var(--tg-theme-bg-color, #1e1e1e);
+            --text-color: var(--tg-theme-text-color, #ffffff);
+            --hint-color: var(--tg-theme-hint-color, #aaaaaa);
+            --button-color: var(--tg-theme-button-color, #3390ec);
+            --button-text-color: var(--tg-theme-button-text-color, #ffffff);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .loader {
+            border: 4px solid var(--hint-color);
+            border-top: 4px solid var(--button-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .error {
+            color: #ff5c5c;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .whisper-box {
+            background: rgba(255,255,255,0.05);
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            text-align: left;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+        }
+        .meta {
+            font-size: 12px;
+            color: var(--hint-color);
+            margin-top: 15px;
+            text-align: center;
+        }
+        .media-container {
+            margin-top: 15px;
+            text-align: center;
+        }
+        img, video {
+            max-width: 100%;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app">
+        <div class="loader" id="loader"></div>
+        <div id="content" style="display: none;"></div>
+    </div>
 
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        const params = new URLSearchParams(window.location.search);
+        const whisperId = params.get('wid');
+
+        if (!whisperId) {
+            showError("Invalid link.");
+        } else {
+            fetchWhisper(whisperId);
+        }
+
+        async function fetchWhisper(wid) {
+            try {
+                // Send initData to OUR backend for verification
+                const response = await fetch('/api/whisper', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        init_data: tg.initData,
+                        whisper_id: wid
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showError(data.detail || "Unknown error");
+                    return;
+                }
+
+                if (data.deleted) {
+                    showError("🔥 This whisper self-destructed after reading.");
+                    return;
+                }
+
+                renderWhisper(data);
+            } catch (e) {
+                showError("Network error. Please try again.");
+                console.error(e);
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+            }
+        }
+
+        function renderWhisper(data) {
+            const contentDiv = document.getElementById('content');
+            let html = `<div class="whisper-box">${escapeHtml(data.message)}</div>`;
+            
+            if (data.media_file_id && data.media_type) {
+                // In production, you'd fetch the file via Bot API 
+                // Example: https://api.telegram.org/file/bot<token>/<file_path>
+                // For security, this should be proxied through your FastAPI backend!
+                html += `<div class="media-container"><p>📎 Attachment: ${data.media_type}</p></div>`;
+            }
+
+            if (data.sender_name) {
+                html += `<div class="meta">From: ${escapeHtml(data.sender_name)}</div>`;
+            } else {
+                html += `<div class="meta">From: Anonymous 🕵️‍♂️</div>`;
+            }
+
+            if (data.viewed) {
+                html += `<div class="meta">✅ Read</div>`;
+            }
+
+            contentDiv.innerHTML = html;
+            contentDiv.style.display = 'block';
+        }
+
+        function showError(msg) {
+            const contentDiv = document.getElementById('content');
+            contentDiv.innerHTML = `<div class="error">${msg}</div>`;
+            contentDiv.style.display = 'block';
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
