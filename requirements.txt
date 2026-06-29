@@ -1,5 +1,6 @@
 aiogram==3.4.1
 flask==3.0.3
+asgiref>=3.8.1
 gunicorn==21.2.0
 sqlalchemy==2.0.30
 pydantic==2.5.3
